@@ -1,4 +1,5 @@
 import re
+import json
 import random as rand
 
 
@@ -14,8 +15,22 @@ def roll(s, mod=0):
     return rolls, sum(rolls) + mod
 
 
-def print_menu(l):
-    print("\n\n" + "*" * 20)
-    for i in range(len(l)):
-        print("[{}] {}".format(i + 1, l[i]))
-    print("*" * 20)
+def rw_dict(filename, mode, data=None, create=False):
+    if mode == "r":
+        try:
+            with open(filename, mode) as file:
+                result = json.load(file)
+        except FileNotFoundError:
+            if create:
+                with open(filename, "w+") as file:
+                    file.write("{}")
+                    print(f'Json file "{filename}" created')
+            else:
+                print(f'File {filename} not found, and not created.')
+            result = {}
+    else:
+        with open(filename, mode) as file:
+            json.dump(data, file)
+        result = None
+
+    return result

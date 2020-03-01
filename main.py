@@ -1,54 +1,55 @@
 import tools
-import json
 import os
-import discord
 from dotenv import load_dotenv
 from discord.ext import commands
 
 load_dotenv()
-token = os.getenv('DISCORD_TOKEN')
+
 bot = commands.Bot(command_prefix='!')
 
-client = discord.Client()
-
-@client.event
-async def on_ready():
-    print(f'{client.user} has connected to discord!')
+customs = tools.rw_dict("custom_dice.json", "r", create=True)
+stats = tools.rw_dict("stats.json", "r", create=True)
 
 
-try:
-    with open("custom_dice.json", "r") as file:
-        customs = json.load(file)
-except FileNotFoundError:
-    with open("custom_dice.json", "w+") as file:
-        file.write("{}")
-        print("File created")
-    customs = dict()
+class AddCommands(commands.Cog):
+    def __init__(self, b, cmnds):
+        self.bot = b
+        self.cmnds = cmnds
 
-try:
-    with open("stats.json", "r") as file:
-        stats = json.load(file)
-except FileNotFoundError:
-    with open("stats.json", "w+") as file:
-        file.write("{}")
-        print("File created")
-    stats = dict()
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        if message.author == self.bot.user:
+            return
+
+        msg = message.content.split(" ")[0].lower()
+
+        if msg in self.cmnds.keys():
+            await message.channel.send(self.cmnds[msg])
+
+    @commands.Cog.listener()
+    async def on_command_error(self, ctx, error):
+        pass
+
+    @commands.command(name="addcommand", help="Adds a command")
+    async def add_command(self, ctx, name, *args):
+        self.cmnds[name] = " ".join(args)
+        tools.rw_dict("commands.json", "w+", self.cmnds)
+        await ctx.send(f'{name} command added and saved!')
+
+    @commands.command(name="commands", help="Lists silly commands.")
+    async def list_commands(self, ctx):
+        await ctx.send("```" + "\t".join(self.cmnds.keys()) + "```")
+
+    @commands.command(name="delcommand", help="Removes a command")
+    async def remove_command(self, ctx, name):
+        del self.cmnds[name]
+        tools.rw_dict("commands.json", "w+", self.cmnds)
+        await ctx.send(f'{name} command deleted!')
+
 
 def main():
-    bot.run(token)
-
-
-def menu():
-    options = {"Roll dice": roll, "Custom Dice": custom}
-    tools.print_menu(list(options.keys()))
-    choice = input("Choice: ")
-
-    try:
-        list(options.values())[int(choice)-1]()
-    except:
-        if choice.lower() == "q":
-            quit(0)
-        print("Please enter valid option or enter \"Q\" to exit.")
+    bot.add_cog(AddCommands(bot, tools.rw_dict("commands.json", "r", create=True)))
+    bot.run(os.getenv('DISCORD_TOKEN'))
 
 
 @bot.command(name='roll', help='Rolls dice.')
@@ -80,47 +81,11 @@ async def roll(ctx, dice):
         print(e)
 
 
-def custom():
-    while True:
-        m = ["New custom roll"] + list(customs.keys()) + ["Delete custom roll"]
-        tools.print_menu(m)
-        choice = input("Choice: ")
-
-        if choice.lower() == "q":
-            return
-        else:
-            choice = int(choice) - 1
-
-        if choice == 0:
-            name = input("Name dice roll: ")
-            r = input("Input custom roll: ")
-            customs[name] = r
-            with open("custom_dice.json", "w+") as customs_file:
-                json.dump(customs, customs_file)
-        elif choice == len(m) - 1:
-            tools.print_menu(list(customs.keys()))
-            ch = int(input("Choice: ")) - 1
-            del customs[list(customs.keys())[ch]]
-            with open("custom_dice.json", "w+") as customs_file:
-                json.dump(customs, customs_file)
-        else:
-            roll(customs[m[choice]])
-
-
 @bot.command(name='setroll', help='Set a custom roll.')
 async def set_roll(ctx, name, r):
     customs[name] = r
+    tools.rw_dict("custom_dice.json", "w+", customs)
     await ctx.send("{} set.".format(name))
-
-
-@bot.command(name='lee', help="It's just a meme.")
-async def lee(ctx):
-    await ctx.send("Red is tens")
-
-
-@bot.command(name='aaron', help="It's just a meme.")
-async def aaron(ctx):
-    await ctx.send("It's just a skin disease")
 
 
 @bot.command(name="set", help="Set arbitrary player stats.")
@@ -128,8 +93,7 @@ async def set_stat(ctx, name, stat, number):
     if name.lower() not in stats:
         stats[name.lower()] = dict()
     stats[name.lower()][stat.lower()] = number
-    with open("stats.json", "w+") as stats_file:
-        json.dump(stats, stats_file)
+    tools.rw_dict("stats.json", "w+", stats)
     await ctx.send(f'{name}\'s {stat} set to {number}')
 
 
@@ -145,27 +109,6 @@ async def get_stat(ctx, name, stat=None):
         await ctx.send(result)
         return
     await ctx.send(f'{name}\'s {stat} is {stats[name.lower()][stat.lower()]}.')
-
-
-@client.event
-async def on_message(message):
-    if message.author == client.user:
-        return
-    commands = {"roll": set_roll, "setroll": set_roll}
-
-    msg = message.content.lower()
-    if msg[0] == "!":
-        spc = msg.find(" ")
-        if spc == -1:
-            command = msg[1:]
-            content = ""
-        else:
-            command = msg[msg.find("!")+1:spc]
-            content = msg[spc+1:]
-
-        if command in commands:
-            commands[command](content)
-        print(command, content)
 
 
 main()
