@@ -38,6 +38,19 @@ def main():
     bot.run(token)
 
 
+def menu():
+    options = {"Roll dice": roll, "Custom Dice": custom}
+    tools.print_menu(list(options.keys()))
+    choice = input("Choice: ")
+
+    try:
+        list(options.values())[int(choice)-1]()
+    except:
+        if choice.lower() == "q":
+            quit(0)
+        print("Please enter valid option or enter \"Q\" to exit.")
+
+
 @bot.command(name='roll', help='Rolls dice.')
 async def roll(ctx, dice):
     if dice in customs:
@@ -67,6 +80,33 @@ async def roll(ctx, dice):
         print(e)
 
 
+def custom():
+    while True:
+        m = ["New custom roll"] + list(customs.keys()) + ["Delete custom roll"]
+        tools.print_menu(m)
+        choice = input("Choice: ")
+
+        if choice.lower() == "q":
+            return
+        else:
+            choice = int(choice) - 1
+
+        if choice == 0:
+            name = input("Name dice roll: ")
+            r = input("Input custom roll: ")
+            customs[name] = r
+            with open("custom_dice.json", "w+") as customs_file:
+                json.dump(customs, customs_file)
+        elif choice == len(m) - 1:
+            tools.print_menu(list(customs.keys()))
+            ch = int(input("Choice: ")) - 1
+            del customs[list(customs.keys())[ch]]
+            with open("custom_dice.json", "w+") as customs_file:
+                json.dump(customs, customs_file)
+        else:
+            roll(customs[m[choice]])
+
+
 @bot.command(name='setroll', help='Set a custom roll.')
 async def set_roll(ctx, name, r):
     customs[name] = r
@@ -87,15 +127,45 @@ async def aaron(ctx):
 async def set_stat(ctx, name, stat, number):
     if name.lower() not in stats:
         stats[name.lower()] = dict()
-    stats[name.lower()][stat.lower()] = int(number)
+    stats[name.lower()][stat.lower()] = number
     with open("stats.json", "w+") as stats_file:
         json.dump(stats, stats_file)
     await ctx.send(f'{name}\'s {stat} set to {number}')
 
 
 @bot.command(name="get", help="Gets arbitrary player stat.")
-async def get_stat(ctx, name, stat):
+async def get_stat(ctx, name, stat=None):
+    if stat is None:
+        result = f'```{name}\'s stats:\n'
+
+        for k, d in stats[name.lower()].items():
+            result += f'\t{k}: {d}\n'
+        result += "```"
+
+        await ctx.send(result)
+        return
     await ctx.send(f'{name}\'s {stat} is {stats[name.lower()][stat.lower()]}.')
+
+
+@client.event
+async def on_message(message):
+    if message.author == client.user:
+        return
+    commands = {"roll": set_roll, "setroll": set_roll}
+
+    msg = message.content.lower()
+    if msg[0] == "!":
+        spc = msg.find(" ")
+        if spc == -1:
+            command = msg[1:]
+            content = ""
+        else:
+            command = msg[msg.find("!")+1:spc]
+            content = msg[spc+1:]
+
+        if command in commands:
+            commands[command](content)
+        print(command, content)
 
 
 main()
