@@ -1,54 +1,29 @@
 import tools
 import os
+import random
+from Cards import Cards
 from dotenv import load_dotenv
 from discord.ext import commands
+from AddCommands import AddCommands
+from FalloutCombat import FalloutCombat
+from RadioBot import Music
+import logging
 
+logger = logging.getLogger('discord')
+logger.setLevel(logging.ERROR)
 load_dotenv()
-
 bot = commands.Bot(command_prefix='!')
 
 customs = tools.rw_dict("custom_dice.json", "r", create=True)
 stats = tools.rw_dict("stats.json", "r", create=True)
 
-
-class AddCommands(commands.Cog):
-    def __init__(self, b, cmnds):
-        self.bot = b
-        self.cmnds = cmnds
-
-    @commands.Cog.listener()
-    async def on_message(self, message):
-        if message.author == self.bot.user:
-            return
-
-        msg = message.content.split(" ")[0].lower()
-
-        if msg in self.cmnds.keys():
-            await message.channel.send(self.cmnds[msg])
-
-    @commands.Cog.listener()
-    async def on_command_error(self, ctx, error):
-        pass
-
-    @commands.command(name="addcommand", help="Adds a command")
-    async def add_command(self, ctx, name, *args):
-        self.cmnds[name] = " ".join(args)
-        tools.rw_dict("commands.json", "w+", self.cmnds)
-        await ctx.send(f'{name} command added and saved!')
-
-    @commands.command(name="commands", help="Lists silly commands.")
-    async def list_commands(self, ctx):
-        await ctx.send("```" + "\t".join(self.cmnds.keys()) + "```")
-
-    @commands.command(name="delcommand", help="Removes a command")
-    async def remove_command(self, ctx, name):
-        del self.cmnds[name]
-        tools.rw_dict("commands.json", "w+", self.cmnds)
-        await ctx.send(f'{name} command deleted!')
+deck = Cards()
 
 
 def main():
     bot.add_cog(AddCommands(bot, tools.rw_dict("commands.json", "r", create=True)))
+    bot.add_cog(Music(bot))
+    bot.add_cog(FalloutCombat(bot, "FNT"))
     bot.run(os.getenv('DISCORD_TOKEN'))
 
 
@@ -88,6 +63,25 @@ async def set_roll(ctx, name, r):
     await ctx.send("{} set.".format(name))
 
 
+@bot.command(name='bugs', help='Bug loot table.')
+async def bug_spawner(ctx, n=1):
+    rarities = [("Legendary", .1), ("Uncommon", .3), ("Common", .6)]
+    converted = []
+    # Assumes rarities are in order from rare -> common
+    for x in range(len(rarities)):
+        mn = sum([rarities[i][1] for i in range(x)])
+        mx = mn + rarities[x][1]
+        converted.append((rarities[x][0], (mn, mx)))
+    result = []
+    fhack = "\n"
+    for i in range(n):
+        r = random.random()
+        for rarity, (mn, mx) in converted:
+            if mn <= r < mx:
+                result.append(f'{rarity}: {r}')
+    await ctx.send(f'```{fhack.join(result)}```')
+
+
 @bot.command(name="set", help="Set arbitrary player stats.")
 async def set_stat(ctx, name, stat, number):
     if name.lower() not in stats:
@@ -110,5 +104,20 @@ async def get_stat(ctx, name, stat=None):
         return
     await ctx.send(f'{name}\'s {stat} is {stats[name.lower()][stat.lower()]}.')
 
+
+@bot.command(name="shuffle", help="Shuffle the deck.")
+async def shuffle(ctx):
+    deck.shuffle_deck()
+    await ctx.send("Shuffled deck.")
+
+
+@bot.command(name="draw", help="Draws x cards.")
+async def draw(ctx, n=1):
+    hand = deck.draw(n)
+    result = list()
+    for h in hand:
+        result.append(f'{h[1]} of {h[0]}')
+    result = "\n".join(result)
+    await ctx.send(f'```{result}```')
 
 main()
